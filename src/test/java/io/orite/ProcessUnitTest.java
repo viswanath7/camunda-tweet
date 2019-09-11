@@ -18,10 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import java.text.SimpleDateFormat;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.*;
@@ -118,5 +115,40 @@ public class ProcessUnitTest {
 
 
     //org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.assertThat(processInstance).isEnded().hasPassed(END_EVENT_TWEET_REJECTED);
+  }
+
+
+  @Test
+  @Deployment(resources = "process.bpmn")
+  public void testTweetFromSuperUser() {
+    ProcessInstance processInstance = runtimeService()
+            .createMessageCorrelation("superUserTweet")
+            .setVariable("content", Variables.stringValue("Chango peludo super user - "+new SimpleDateFormat("dd-MM-yyyy HH:mm:ss").format(new Date())))
+            .correlateWithResult()
+            .getProcessInstance();
+    org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.assertThat(processInstance).isStarted();
+
+    List<Job> jobList = jobQuery()
+            .processInstanceId(processInstance.getId())
+            .list();
+
+    // execute the job
+    assertThat(jobList).hasSize(1);
+    execute(jobList.get(0));
+
+    org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.assertThat(processInstance).isEnded();
+  }
+
+  @Test
+  @Deployment(resources = "process.bpmn")
+  public void testTweetWithdrawn() {
+    ProcessInstance processInstance = runtimeService()
+            .startProcessInstanceByKey(PROCESS_DEFINITION_KEY, Collections.singletonMap("content", "Test tweetWithdrawn message"));
+    org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.assertThat(processInstance).isStarted().isWaitingAt(USER_TASK_REVIEW_TWEET);
+    runtimeService()
+            .createMessageCorrelation("tweetWithdrawn")
+            .processInstanceVariableEquals("content", "Test tweetWithdrawn message")
+            .correlateWithResult();
+    org.camunda.bpm.engine.test.assertions.bpmn.BpmnAwareTests.assertThat(processInstance).isEnded();
   }
 }
